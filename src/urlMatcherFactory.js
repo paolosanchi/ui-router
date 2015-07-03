@@ -98,13 +98,17 @@ function UrlMatcher(pattern, config, parentMatcher) {
     return params[id];
   }
 
-  function quoteRegExp(string, pattern, squash, optional) {
+  function quoteRegExp(string, pattern, squash, optional, prefix) {
     var surroundPattern = ['',''], result = string.replace(/[\\\[\]\^$*+?.()|{}]/g, "\\$&");
     if (!pattern) return result;
     switch(squash) {
       case false: surroundPattern = ['(', ')' + (optional ? "?" : "")]; break;
       case true:  surroundPattern = ['?(', ')?']; break;
       default:    surroundPattern = ['(' + squash + "|", ')?']; break;
+    }
+    if (!!prefix) {
+        surroundPattern[0] += "?:" + prefix + "(";
+        surroundPattern[1] = ")" + surroundPattern[1];
     }
     return result + surroundPattern[0] + pattern + surroundPattern[1];
   }
@@ -117,7 +121,9 @@ function UrlMatcher(pattern, config, parentMatcher) {
     var id, regexp, segment, type, cfg, arrayMode;
     id          = m[2] || m[3]; // IE[78] returns '' for unmatched groups instead of null
     cfg         = config.params[id];
-    segment     = pattern.substring(last, m.index);
+    segment = pattern.substring(last, m.index);
+    if(cfg && cfg.prefix)
+      segment = segment.replace(cfg.prefix, "");
     regexp      = isSearch ? m[4] : m[4] || (m[1] == '*' ? '.*' : null);
     type        = $$UMFP.type(regexp || "string") || inherit($$UMFP.type("string"), { pattern: new RegExp(regexp, config.caseInsensitive ? 'i' : undefined) });
     return {
@@ -131,7 +137,8 @@ function UrlMatcher(pattern, config, parentMatcher) {
     if (p.segment.indexOf('?') >= 0) break; // we're into the search part
 
     param = addParameter(p.id, p.type, p.cfg, "path");
-    compiled += quoteRegExp(p.segment, param.type.pattern.source, param.squash, param.isOptional);
+    var prefix = p.cfg ? p.cfg.prefix : "";
+    compiled += quoteRegExp(p.segment, param.type.pattern.source, param.squash, param.isOptional, prefix);
     segments.push(p.segment);
     last = placeholder.lastIndex;
   }
@@ -336,10 +343,12 @@ UrlMatcher.prototype.format = function (values) {
     var isDefaultValue = param.isOptional && param.type.equals(param.value(), value);
     var squash = isDefaultValue ? param.squash : false;
     var encoded = param.type.encode(value);
+    var prefix = param.prefix;
 
     if (isPathParam) {
       var nextSegment = segments[i + 1];
       if (squash === false) {
+        result += prefix;
         if (encoded != null) {
           if (isArray(encoded)) {
             result += map(encoded, encodeDashes).join("-");
@@ -352,7 +361,7 @@ UrlMatcher.prototype.format = function (values) {
         var capture = result.match(/\/$/) ? /\/?(.*)/ : /(.*)/;
         result += nextSegment.match(capture)[1];
       } else if (isString(squash)) {
-        result += squash + nextSegment;
+        result += prefix + squash + nextSegment;
       }
     } else {
       if (encoded == null || (isDefaultValue && squash !== false)) continue;
@@ -898,12 +907,13 @@ function $UrlMatcherFactory() {
       config.value = ""; // for 0.2.x; in 0.3.0+ do not automatically default to ""
     var isOptional = config.value !== undefined;
     var squash = getSquashPolicy(config, isOptional);
+    var prefix = config.prefix ? config.prefix : "";
     var replace = getReplace(config, arrayMode, isOptional, squash);
 
     function unwrapShorthand(config) {
       var keys = isObject(config) ? objectKeys(config) : [];
       var isShorthand = indexOf(keys, "value") === -1 && indexOf(keys, "type") === -1 &&
-                        indexOf(keys, "squash") === -1 && indexOf(keys, "array") === -1;
+                        indexOf(keys, "squash") === -1 && indexOf(keys, "array") === -1 && indexOf(keys, "prefix") === -1;
       if (isShorthand) config = { value: config };
       config.$$fn = isInjectable(config.value) ? config.value : function () { return config.value; };
       return config;
@@ -979,6 +989,7 @@ function $UrlMatcherFactory() {
       location: location,
       array: arrayMode,
       squash: squash,
+      prefix: prefix,
       replace: replace,
       isOptional: isOptional,
       value: $value,
