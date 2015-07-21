@@ -101,14 +101,18 @@ function UrlMatcher(pattern, config, parentMatcher) {
   function quoteRegExp(string, pattern, squash, optional, prefix) {
     var surroundPattern = ['',''], result = string.replace(/[\\\[\]\^$*+?.()|{}]/g, "\\$&");
     if (!pattern) return result;
-    switch(squash) {
-      case false: surroundPattern = ['(', ')' + (optional ? "?" : "")]; break;
-      case true:  surroundPattern = ['?(', ')?']; break;
-      default:    surroundPattern = ['(' + squash + "|", ')?']; break;
-    }
+
+    var pre = "";
+    var post = "";
     if (!!prefix) {
-        surroundPattern[0] += "?:" + prefix + "(";
-        surroundPattern[1] = ")" + surroundPattern[1];
+        pre += "?:" + prefix + "(";
+        post = ")" + surroundPattern[1];
+    }
+
+    switch(squash) {
+      case false: surroundPattern = ['(' + pre, post + ')' + (optional ? "?" : "")]; break;
+      case true:  surroundPattern = ['?(' + pre, post + ')?']; break;
+      default:    surroundPattern = ['(' + pre + squash + "|", post + ')?']; break;
     }
     return result + surroundPattern[0] + pattern + surroundPattern[1];
   }
